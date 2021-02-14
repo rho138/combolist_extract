@@ -5,11 +5,11 @@ import shlex
 import sys
 from argparse import ArgumentParser
 from tqdm import tqdm
-from subprocess import run
+from subprocess import check_call
 from multiprocessing import Pool as pool
 from multiprocessing import cpu_count
 from tempfile import mkstemp
-from shutil import rmtree
+from shutil import rmtree, copyfileobj
 
 def dump_filepaths(path):
   if not os.path.isdir(path):
@@ -87,16 +87,15 @@ def merge_and_dump(my_args):
     os.unlink(bad)
 
   # open data files
-  a = open(mad, 'w')
-  b = open(bad, 'w')
+  a = open(mad, 'wb')
+  b = open(bad, 'wb')
 
   # iterate our good list
   print('!! Starting merge and dump of Good Files:')
   pbar = tqdm(total=len(gl))
   for file in gl:
-    with open(file, 'r') as fh:
-      for line in fh:
-        a.write(line)
+    with open(file, 'rb') as fh:
+      copyfileobj(fh, a)
     os.unlink(file)
     pbar.update(1)
 
@@ -104,9 +103,8 @@ def merge_and_dump(my_args):
   print('!! Starting merge and dump of Good Files:')
   pbar = tqdm(total=len(bl))
   for file in bl:
-    with open(file, 'r') as fh:
-      for line in fh:
-        b.write(line)
+    with open(file, 'rb') as fh:
+      copyfileobj(fh, b)
     os.unlink(file)
     pbar.update(1)
 
@@ -130,19 +128,23 @@ def run_su(my_args):
     os.unlink(run_sub)
   files = ['%s/mad_out.txt' % (path), '%s/mad_bad.txt' % (path)]
 
+  # set environment variables for LC_ALL=C
+  myenv = os.environ.copy()
+  myenv['LC_ALL'] = 'C'
+
   # run through our main file, getting a count of domains seen
-  cmd = 'LC_ALL=C sort --parallel=%i -u %s && LC_ALL=C cut -f 2 -d '@' %s |\
-    LC_ALL=C uniq -c >> %s' % (cores, files[0], files[0], run_sug)
-  os.unlink(files[0])
+  cmd = 'sort --parallel=%i -u %s && cut -f 2 -d \'@\' %s |\
+    uniq -c >> %s' % (cores, files[0], files[0], run_sug)
   print('!! Running command: %s\n!!   No Progress bar' % (cmd))
-  run(shlex.split(cmd))
+  check_call(shlex.split(cmd), env=myenv, shell=True)
+  os.unlink(files[0])
 
   # run through our garbage container and get a count for the bad data
   #   NOTE: may remove count if it's not worthwhile.
-  cmd = 'LC_ALL=C sort --parallel=%i -u %s' \
+  cmd = 'sort --parallel=%i -u %s' \
     % (cores, files[1], files[1], run_sub)
   print('!! Running command: %s\n!!   No Progress bar' % (cmd))
-  run(shlex.split(cmd))
+  check_call(shlex.split(cmd), env=myenv, shell=True)
   os.unlink(files[1])
 
 
