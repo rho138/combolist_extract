@@ -12,6 +12,12 @@ done
 
 ```
 
+## Requirements
+We only have one package not in stdlib to install, `tqdm`, you can use pip to perform the action
+```
+pip install -r requirements.txt
+```
+
 ## Outputs
 iterates a 'data' directory with combolist text files and parses them into two files.
 
