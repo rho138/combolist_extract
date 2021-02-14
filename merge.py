@@ -168,8 +168,8 @@ def main(my_args):
     print("!! Starting file dumping to %s/temp_out:" % (path))
     for _ in tqdm(p.imap_unordered(get_lines, fp_list), total=len(fp_list)):
       pass
-  merge_and_dump()
-  run_su()
+  merge_and_dump(my_args)
+  run_su(my_args)
 
 
 if __name__ == '__main__':
