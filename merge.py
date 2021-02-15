@@ -3,6 +3,7 @@ import os
 import re
 import shlex
 import sys
+import stat
 from argparse import ArgumentParser
 from tqdm import tqdm
 from subprocess import check_call
@@ -116,6 +117,7 @@ def run_su(my_args):
   # Get our user args
   path = my_args.path
   cores = my_args.cores
+  br_name = my_args.br_name
 
   # Create our vars for outputs
   run_sug = '%s/run_su_good.txt' % (path)
@@ -124,32 +126,51 @@ def run_su(my_args):
   # purge old data
   if os.path.exists(run_sug):
     os.unlink(run_sug)
+  open(run_sug, 'w').close()
   if os.path.exists(run_sub):
     os.unlink(run_sub)
-  files = ['%s/mad_out.txt' % (path), '%s/mad_bad.txt' % (path)]
+  open(run_sub, 'w').close()
+  files = ['%s/mad_out.txt' % (path), '%s/bad_out.txt' % (path)]
 
-  # set environment variables for LC_ALL=C
-  myenv = os.environ.copy()
-  myenv['LC_ALL'] = 'C'
+  # Create a bash file to execute
+  with open(br_name, 'w') as f:
+    # set environment variables for LC_ALL=C
+    f.write('LC_ALL=C\n')
 
-  # run through our main file, getting a count of domains seen
-  cmd = 'sort --parallel=%i -u %s && cut -f 2 -d \'@\' %s |\
-    uniq -c >> %s' % (cores, files[0], files[0], run_sug)
-  print('!! Running command: %s\n!!   No Progress bar' % (cmd))
-  check_call(shlex.split(cmd), env=myenv, shell=True)
+    # run through our main file, getting a count of domains seen
+    cmd = 'sort --parallel=%i -u %s %s \n' % (cores, files[0], run_sug)
+    f.write('''
+echo "!! Running command: '%s'"
+echo "!! No Progress bar"
+''' % (cmd))
+    f.write(cmd)
+
+    cmd = 'cut -f 2 -d \'@\' %s | uniq -c > %s \n' % (files[0], run_sug)
+    f.write('''
+echo "!! Running command: '%s'"
+echo "!! No Progress bar"
+''' % (cmd))
+    f.write(cmd)
+
+
+    # run through our garbage container sort it
+    cmd = 'sort --parallel=%i -u %s > %s' % (cores, files[1], run_sub)
+    f.write('''
+echo "!! Running command: '%s'"
+echo "!!   No Progress bar"
+''' % (cmd))
+    f.write(cmd)
+
+  cmd = '/bin/bash %s' % (br_name)
+  os.chmod(br_name, stat.S_IRWXU)
+  check_call(shlex.split(cmd))
   os.unlink(files[0])
-
-  # run through our garbage container and get a count for the bad data
-  #   NOTE: may remove count if it's not worthwhile.
-  cmd = 'sort --parallel=%i -u %s' \
-    % (cores, files[1], files[1], run_sub)
-  print('!! Running command: %s\n!!   No Progress bar' % (cmd))
-  check_call(shlex.split(cmd), env=myenv, shell=True)
   os.unlink(files[1])
 
 
 
 def main(my_args):
+  '''
   # Get our user args
   path = my_args.path
   cores = my_args.cores
@@ -171,6 +192,7 @@ def main(my_args):
     for _ in tqdm(p.imap_unordered(get_lines, fp_list), total=len(fp_list)):
       pass
   merge_and_dump(my_args)
+  '''
   run_su(my_args)
 
 
@@ -180,6 +202,9 @@ if __name__ == '__main__':
     help="Set the path, else use pwd. Target path must have 'data' folder", default='.')
   args.add_argument('--cores', '-c', type=int, dest='cores',
     help="Set max cores, else set to cpu_count-1", default=cpu_count()-1)
+  args.add_argument('--bash-run-name', '-br', type=str, dest='br_name', \
+    help="Set bash run script name, else name set to ./bash_run_helper.sh", \
+    default="./bash_run_helper.sh")
   my_args = args.parse_args()
   main(my_args)
 
