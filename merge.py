@@ -28,7 +28,7 @@ def dump_filepaths(path):
 def get_lines(filepath):
   # regex compile doesn't really matter, but primes the cache table and has pretty var
   # https://stackoverflow.com/a/52607930
-  rgx = re.compile(r'(?:\.?)([\w\-_+#~!$&\'\.]+(?<!\.)(@|[ ]\(?[ ]?(at|AT)[ ]?\)?[ ])(?<!\.)[\w]+[\w\-\.]*\.[a-zA-Z-]{2,3})(?:[^\w])')
+  rgx = re.compile(r'(?:\.?)([\w\-_+#~!$&\'\.]+(@|[ ]\(?[ ]?(at|AT)[ ]?\)?[ ])(?<!\.)[\w]+[\w\-\.]*\.[a-zA-Z-]{2,3})(?:[^\w])')
 
   # get our file basename
   base = os.path.basename(filepath)
@@ -46,6 +46,7 @@ def get_lines(filepath):
 
   with open(filepath) as e:
     for line in e:
+      line = line.strip()
       # find all of the email addresses
       match = re.findall(rgx, line)
       # if it's a non-conforming string then we catalog the whole thing
@@ -170,7 +171,6 @@ echo "!!   No Progress bar"
 
 
 def main(my_args):
-  '''
   # Get our user args
   path = my_args.path
   cores = my_args.cores
@@ -192,7 +192,6 @@ def main(my_args):
     for _ in tqdm(p.imap_unordered(get_lines, fp_list), total=len(fp_list)):
       pass
   merge_and_dump(my_args)
-  '''
   run_su(my_args)
 
 
