@@ -10,7 +10,7 @@ from subprocess import check_call
 from multiprocessing import Pool as pool
 from multiprocessing import cpu_count
 from tempfile import mkstemp
-from shutil import rmtree, copyfileobj
+from shutil import rmtree
 
 def dump_filepaths(path):
   if not os.path.isdir(path):
@@ -68,7 +68,6 @@ def merge_and_dump(my_args):
   # Get our user args
   path = my_args.path
   s_mem = my_args.s_mem
-  cores = my_args.cores
 
   # Create our vars for outputs
   mad = '%s/mad_out.txt' % (path)
@@ -86,23 +85,28 @@ def merge_and_dump(my_args):
 
 
   # iterate our good list
-  cmd = 'export LC_ALL=C; sort -S %i%% --parallel=%i -u -m %s -o %s' \
-    % (s_mem, cores, good_fp, mad)
-  print('!! Starting merge and dump of Good Files:\n!! %s') % (cmd)
-  check_call(shlex.split(cmd))
+  cmd = '/bin/bash -c "LC_ALL=C sort -S %i%% -u -m %s -o %s"' \
+    % (s_mem, good_fp, mad)
+  print('!! Starting merge and dump of Good Files:\n!! %s' % (cmd))
+  try:
+    check_call(shlex.split(cmd))
+  except Exception:
+    print(Exception.with_traceback())
 
 
 
   # iterate our bad list
-  cmd = 'export LC_ALL=C; sort -S %i%% --parallel=%i -u -m %s -o %s' \
-    % (s_mem, cores, bad_fp, run_sub)
-  print('!! Starting merge and dump of Bad Files:\n!! %s') % (cmd)
+  cmd = '/bin/bash -c "LC_ALL=C sort -S %i%% -u -m %s -o %s"' \
+    % (s_mem, bad_fp, run_sub)
+  print('!! Starting merge and dump of Bad Files:\n!! %s' % (cmd))
   check_call(shlex.split(cmd))
 
 def run_su(my_args):
   # Get our user args
   path = my_args.path
   br_name = my_args.br_name
+  s_mem = my_args.s_mem
+  cores = my_args.cores
 
   # Create our vars for outputs
   run_sug = '%s/run_su_good.txt' % (path)
@@ -116,7 +120,7 @@ def run_su(my_args):
   open(run_sug, 'w').close()
 
 
-  files = '%s/mad_out.txt' % (path)
+  mad_out = '%s/mad_out.txt' % (path)
 
   # Create a bash file to execute
   with open(br_name, 'w') as f:
@@ -124,7 +128,8 @@ def run_su(my_args):
     f.write('export LC_ALL=C\n')
 
     # Command to capture and count domains
-    cmd = 'cut -f 2 -d \'@\' %s | sort | uniq -c > %s ' % (files[0], run_sug)
+    cmd = 'cut -f 2 -d \'@\' %s | sort -S %i%% --parallel=%i | uniq -c > %s ' \
+      % (mad_out, s_mem, cores, run_sug)
     f.write('''
 echo "!! Running command:"
 echo "  !! '%s'"
@@ -132,15 +137,15 @@ echo "!! No Progress bar"
 ''' % (cmd))
     f.write(cmd + '\n')
 
-  cmd = '/bin/bash %s' % (br_name)
+  cmd = '/bin/bash -c "%s"' % (br_name)
   os.chmod(br_name, stat.S_IRWXU)
   check_call(shlex.split(cmd))
-  os.unlink(files[0])
+  os.unlink(mad_out)
 
 
 
 def main(my_args):
-  # Get our user args
+    # Get our user args
   path = my_args.path
   cores = my_args.cores
 
@@ -160,7 +165,7 @@ def main(my_args):
     print("!! Starting file dumping to %s/temp_out:" % (path))
     for _ in tqdm(p.imap_unordered(get_lines, fp_list), total=len(fp_list)):
       pass
-  merge_and_dump(my_args)
+    merge_and_dump(my_args)
   run_su(my_args)
 
 
