@@ -67,106 +67,75 @@ def get_lines(filepath):
 def merge_and_dump(my_args):
   # Get our user args
   path = my_args.path
-
-  # Split out our gp_list into food/bad
-  fp_list = dump_filepaths('%s/temp_out/' % (path))
-  gl = []
-  bl = []
-  for f in fp_list:
-    if re.search('good_', f):
-      gl.append(f)
-    else:
-      bl.append(f)
+  s_mem = my_args.s_mem
+  cores = my_args.cores
 
   # Create our vars for outputs
   mad = '%s/mad_out.txt' % (path)
-  bad = '%s/bad_out.txt' % (path)
+  run_sub = '%s/run_su_bad.txt' % (path)
 
   # purge the data file if it's there
   if os.path.exists(mad):
     os.unlink(mad)
-  if os.path.exists(bad):
-    os.unlink(bad)
+  if os.path.exists(run_sub):
+    os.unlink(run_sub)
 
-  # open data files
-  a = open(mad, 'wb')
-  b = open(bad, 'wb')
+  # Create our base regex for sort
+  good_fp = '%s/temp_out/good_*' % (path)
+  bad_fp = '%s/temp_out/bad_*' % (path)
+
 
   # iterate our good list
-  print('!! Starting merge and dump of Good Files:')
-  pbar = tqdm(total=len(gl))
-  for file in gl:
-    with open(file, 'rb') as fh:
-      copyfileobj(fh, a)
-    os.unlink(file)
-    pbar.update(1)
+  cmd = 'export LC_ALL=C; sort -S %i%% --parallel=%i -u -m %s -o %s' \
+    % (s_mem, cores, good_fp, mad)
+  print('!! Starting merge and dump of Good Files:\n!! %s') % (cmd)
+  check_call(shlex.split(cmd))
+
+
 
   # iterate our bad list
-  print('!! Starting merge and dump of Good Files:')
-  pbar = tqdm(total=len(bl))
-  for file in bl:
-    with open(file, 'rb') as fh:
-      copyfileobj(fh, b)
-    os.unlink(file)
-    pbar.update(1)
-
-  # Close our file handles
-  a.close()
-  b.close()
+  cmd = 'export LC_ALL=C; sort -S %i%% --parallel=%i -u -m %s -o %s' \
+    % (s_mem, cores, bad_fp, run_sub)
+  print('!! Starting merge and dump of Bad Files:\n!! %s') % (cmd)
+  check_call(shlex.split(cmd))
 
 def run_su(my_args):
   # Get our user args
   path = my_args.path
-  cores = my_args.cores
   br_name = my_args.br_name
 
   # Create our vars for outputs
   run_sug = '%s/run_su_good.txt' % (path)
-  run_sub = '%s/run_su_bad.txt' % (path)
 
   # purge old data
   if os.path.exists(run_sug):
     os.unlink(run_sug)
   open(run_sug, 'w').close()
-  if os.path.exists(run_sub):
-    os.unlink(run_sub)
-  open(run_sub, 'w').close()
-  files = ['%s/mad_out.txt' % (path), '%s/bad_out.txt' % (path)]
+  if os.path.exists(run_sug):
+    os.unlink(run_sug)
+  open(run_sug, 'w').close()
+
+
+  files = '%s/mad_out.txt' % (path)
 
   # Create a bash file to execute
   with open(br_name, 'w') as f:
     # set environment variables for LC_ALL=C
-    f.write('LC_ALL=C\n')
+    f.write('export LC_ALL=C\n')
 
-    # run through our main file, getting a count of domains seen
-    cmd = 'sort --parallel=%i -u %s %s \n' % (cores, files[0], run_sug)
+    # Command to capture and count domains
+    cmd = 'cut -f 2 -d \'@\' %s | sort | uniq -c > %s ' % (files[0], run_sug)
     f.write('''
-echo "!! Running command: '%s'"
+echo "!! Running command:"
+echo "  !! '%s'"
 echo "!! No Progress bar"
 ''' % (cmd))
-    f.write(cmd)
-
-    cmd = 'cut -f 2 -d \'@\' %s | uniq -c > %s \n' % (files[0], run_sug)
-    f.write('''
-echo "!! Running command: '%s'"
-echo "!! No Progress bar"
-''' % (cmd))
-    f.write(cmd)
-
-
-    # run through our garbage container sort it
-    cmd = 'sort --parallel=%i -u %s > %s' % (cores, files[1], run_sub)
-    f.write('''
-echo "!! Running command: '%s'"
-echo "!!   No Progress bar"
-''' % (cmd))
-    f.write(cmd)
+    f.write(cmd + '\n')
 
   cmd = '/bin/bash %s' % (br_name)
   os.chmod(br_name, stat.S_IRWXU)
   check_call(shlex.split(cmd))
   os.unlink(files[0])
-  os.unlink(files[1])
 
 
 
@@ -204,6 +173,8 @@ if __name__ == '__main__':
   args.add_argument('--bash-run-name', '-br', type=str, dest='br_name', \
     help="Set bash run script name, else name set to ./bash_run_helper.sh", \
     default="./bash_run_helper.sh")
+  args.add_argument('--sort-memory', '-S', type=int, dest='s_mem',\
+    help="Set the percentage of RAM to use for sort, else 10", default=10)
   my_args = args.parse_args()
   main(my_args)
 
